@@ -10,6 +10,7 @@ namespace ego_planner
   {
     current_wp_ = 0;
     exec_state_ = FSM_EXEC_STATE::INIT;
+    next_plan_attempt_wall_time_ = ros::WallTime();
     have_target_ = false;
     have_odom_ = false;
     have_recv_pre_agent_ = false;
@@ -31,10 +32,15 @@ namespace ego_planner
     nh.param("fsm/manual_goal_max_age_s", manual_goal_max_age_s_, 0.0);
     nh.param("fsm/manual_goal_max_future_skew_s",
              manual_goal_max_future_skew_s_, 0.5);
+    nh.param("fsm/replan_failure_backoff_s",
+             replan_failure_backoff_s_, 0.2);
+    nh.param("fsm/initial_plan_trials", initial_plan_trials_, 3);
     nh.param<std::string>("fsm/manual_goal_expected_frame",
                           manual_goal_expected_frame_, "");
     manual_goal_max_future_skew_s_ =
         std::max(0.0, manual_goal_max_future_skew_s_);
+    replan_failure_backoff_s_ = std::max(0.0, replan_failure_backoff_s_);
+    initial_plan_trials_ = std::max(1, initial_plan_trials_);
 
     have_trigger_ = !flag_realworld_experiment_;
 
@@ -272,6 +278,7 @@ namespace ego_planner
     }
 
     cout << "Triggered!" << endl;
+    next_plan_attempt_wall_time_ = ros::WallTime();
     have_trigger_ = true;
     init_pt_ = odom_pos_;
 
@@ -538,21 +545,30 @@ namespace ego_planner
 
     case SEQUENTIAL_START: // for swarm
     {
+      if (!next_plan_attempt_wall_time_.isZero() &&
+          ros::WallTime::now() < next_plan_attempt_wall_time_)
+        break;
       // cout << "id=" << planner_manager_->pp_.drone_id << " have_recv_pre_agent_=" << have_recv_pre_agent_ << endl;
       if (planner_manager_->pp_.drone_id <= 0 || (planner_manager_->pp_.drone_id >= 1 && have_recv_pre_agent_))
       {
         if (have_odom_ && have_target_ && have_trigger_)
         {
-          bool success = planFromGlobalTraj(10); // zx-todo
+          bool success = planFromGlobalTraj(initial_plan_trials_);
           if (success)
           {
+            next_plan_attempt_wall_time_ = ros::WallTime();
             changeFSMExecState(EXEC_TRAJ, "FSM");
 
             publishSwarmTrajs(true);
           }
           else
           {
-            ROS_ERROR("Failed to generate the first trajectory!!!");
+            next_plan_attempt_wall_time_ =
+                ros::WallTime::now() +
+                ros::WallDuration(replan_failure_backoff_s_);
+            ROS_ERROR_THROTTLE(
+                1.0, "Failed to generate the first trajectory; retrying "
+                     "after %.3f s.", replan_failure_backoff_s_);
             changeFSMExecState(SEQUENTIAL_START, "FSM");
           }
         }
@@ -567,20 +583,27 @@ namespace ego_planner
 
     case GEN_NEW_TRAJ:
     {
+      if (!next_plan_attempt_wall_time_.isZero() &&
+          ros::WallTime::now() < next_plan_attempt_wall_time_)
+        break;
 
       // Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
       // start_yaw_(0)         = atan2(rot_x(1), rot_x(0));
       // start_yaw_(1) = start_yaw_(2) = 0.0;
 
-      bool success = planFromGlobalTraj(10); // zx-todo
+      bool success = planFromGlobalTraj(initial_plan_trials_);
       if (success)
       {
+        next_plan_attempt_wall_time_ = ros::WallTime();
         changeFSMExecState(EXEC_TRAJ, "FSM");
         flag_escape_emergency_ = true;
         publishSwarmTrajs(false);
       }
       else
       {
+        next_plan_attempt_wall_time_ =
+            ros::WallTime::now() +
+            ros::WallDuration(replan_failure_backoff_s_);
         changeFSMExecState(GEN_NEW_TRAJ, "FSM");
       }
       break;
@@ -588,14 +611,21 @@ namespace ego_planner
 
     case REPLAN_TRAJ:
     {
+      if (!next_plan_attempt_wall_time_.isZero() &&
+          ros::WallTime::now() < next_plan_attempt_wall_time_)
+        break;
 
       if (planFromCurrentTraj(1))
       {
+        next_plan_attempt_wall_time_ = ros::WallTime();
         changeFSMExecState(EXEC_TRAJ, "FSM");
         publishSwarmTrajs(false);
       }
       else
       {
+        next_plan_attempt_wall_time_ =
+            ros::WallTime::now() +
+            ros::WallDuration(replan_failure_backoff_s_);
         changeFSMExecState(REPLAN_TRAJ, "FSM");
       }
 
@@ -660,7 +690,10 @@ namespace ego_planner
       else
       {
         if (enable_fail_safe_ && odom_vel_.norm() < 0.1)
+        {
+          next_plan_attempt_wall_time_ = ros::WallTime();
           changeFSMExecState(GEN_NEW_TRAJ, "FSM");
+        }
       }
 
       flag_escape_emergency_ = false;

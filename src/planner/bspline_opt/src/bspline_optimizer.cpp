@@ -1240,7 +1240,13 @@ namespace ego_planner
         }
         if (j < 0) // fail to get the obs free point
         {
-          ROS_ERROR("ERROR! the drone is in obstacle. This should not happen.");
+          const Eigen::Vector3d blocked_point = cps_.points.col(i);
+          ROS_ERROR_THROTTLE(
+              1.0,
+              "Unable to find a free control point before collision: "
+              "point=(%.3f, %.3f, %.3f), in_map=%s.",
+              blocked_point(0), blocked_point(1), blocked_point(2),
+              grid_map_->isInMap(blocked_point) ? "true" : "false");
           in_id = 0;
         }
 
@@ -1510,7 +1516,14 @@ namespace ego_planner
               //      << cps_.points.col(2).transpose() << "\n"
               //      << cps_.points.col(3).transpose() << "\n"
               //      << cps_.points.col(4).transpose() << endl;
-              ROS_WARN("First 3 control points in obstacles! return false, t=%f", t);
+              const Eigen::Vector3d blocked_point =
+                  traj.evaluateDeBoorT(t);
+              ROS_WARN_THROTTLE(
+                  1.0,
+                  "Initial trajectory is occupied: t=%.3f, "
+                  "point=(%.3f, %.3f, %.3f), in_map=%s.",
+                  t, blocked_point(0), blocked_point(1), blocked_point(2),
+                  grid_map_->isInMap(blocked_point) ? "true" : "false");
               return false;
             }
 

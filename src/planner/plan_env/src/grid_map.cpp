@@ -1,5 +1,7 @@
 #include "plan_env/grid_map.h"
 
+#include <limits>
+
 // #define current_img_ md_.depth_image_[image_cnt_ & 1]
 // #define last_img_ md_.depth_image_[!(image_cnt_ & 1)]
 
@@ -823,6 +825,8 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 
   pcl::PointXYZ pt;
   Eigen::Vector3d p3d, p3d_inf;
+  double nearest_raw_obstacle_distance =
+      std::numeric_limits<double>::infinity();
 
   int inf_step = ceil(mp_.obstacles_inflation_ / mp_.resolution_);
   int inf_step_z = 1;
@@ -844,6 +848,8 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 
     /* point inside update range */
     Eigen::Vector3d devi = p3d - md_.camera_pos_;
+    nearest_raw_obstacle_distance =
+        std::min(nearest_raw_obstacle_distance, devi.norm());
     Eigen::Vector3i inf_pt;
 
     if (fabs(devi(0)) < mp_.local_update_range_(0) && fabs(devi(1)) < mp_.local_update_range_(1) &&
@@ -895,6 +901,17 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 
   boundIndex(md_.local_bound_min_);
   boundIndex(md_.local_bound_max_);
+
+  if (getInflateOccupancy(md_.camera_pos_) == 1)
+  {
+    ROS_WARN_THROTTLE(
+        1.0,
+        "Current odometry position is inside the inflated planning map: "
+        "pose=(%.3f, %.3f, %.3f), nearest_raw_obstacle=%.3f m, "
+        "inflation=%.3f m.",
+        md_.camera_pos_(0), md_.camera_pos_(1), md_.camera_pos_(2),
+        nearest_raw_obstacle_distance, mp_.obstacles_inflation_);
+  }
 
   // add virtual ceiling to limit flight height
   if (mp_.virtual_ceil_height_ > -0.5) {
