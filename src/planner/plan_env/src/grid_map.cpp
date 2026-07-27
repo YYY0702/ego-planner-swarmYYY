@@ -669,6 +669,13 @@ void GridMap::updateOccupancyCallback(const ros::TimerEvent & /*event*/)
 {
   if (!md_.flag_use_depth_fusion && mp_.fail_on_cloud_timeout_)
   {
+    if (!md_.has_cloud_)
+    {
+      if (!md_.flag_depth_odom_timeout_)
+        ROS_WARN("Waiting for the first independent planning cloud.");
+      md_.flag_depth_odom_timeout_ = true;
+      return;
+    }
     const double cloud_age =
         (ros::WallTime::now() - md_.last_cloud_receive_wall_time_).toSec();
     if (cloud_age > mp_.cloud_timeout_)

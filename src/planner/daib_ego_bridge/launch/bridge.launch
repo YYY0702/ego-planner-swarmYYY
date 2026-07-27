@@ -1,6 +1,8 @@
 <launch>
   <arg name="config"
        default="$(find daib_ego_bridge)/config/bridge.yaml"/>
+  <arg name="use_sim_time" default="false"/>
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
   <node pkg="daib_ego_bridge"
         type="daib_ego_bridge_node"
         name="daib_ego_bridge"

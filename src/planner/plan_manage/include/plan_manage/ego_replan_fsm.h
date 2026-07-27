@@ -67,6 +67,7 @@ namespace ego_planner
     double manual_goal_min_z_;
     double manual_goal_max_z_;
     double manual_goal_max_age_s_;
+    double manual_goal_max_future_skew_s_;
     std::string manual_goal_expected_frame_;
 
     /* planning data */
@@ -76,6 +77,7 @@ namespace ego_planner
 
     Eigen::Vector3d odom_pos_, odom_vel_, odom_acc_; // odometry state
     Eigen::Quaterniond odom_orient_;
+    ros::Time odom_stamp_;
 
     Eigen::Vector3d init_pt_, start_pt_, start_vel_, start_acc_, start_yaw_; // start state
     Eigen::Vector3d end_pt_, end_vel_;                                       // goal state

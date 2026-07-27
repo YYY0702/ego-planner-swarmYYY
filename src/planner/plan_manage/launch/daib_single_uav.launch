@@ -26,6 +26,7 @@
 
   <include file="$(find daib_ego_bridge)/launch/bridge.launch">
     <arg name="config" value="$(arg bridge_config)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
   </include>
 
   <node pkg="ego_planner"
@@ -61,6 +62,8 @@
     <param name="fsm/manual_goal_min_z" value="-2.5" type="double"/>
     <param name="fsm/manual_goal_max_z" value="4.5" type="double"/>
     <param name="fsm/manual_goal_max_age_s" value="15.0" type="double"/>
+    <param name="fsm/manual_goal_max_future_skew_s"
+           value="0.5" type="double"/>
     <param name="fsm/manual_goal_expected_frame"
            value="$(arg world_frame)" type="string"/>
 

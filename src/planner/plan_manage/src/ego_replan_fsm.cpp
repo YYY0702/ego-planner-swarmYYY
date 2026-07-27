@@ -29,8 +29,12 @@ namespace ego_planner
     nh.param("fsm/manual_goal_min_z", manual_goal_min_z_, -1000.0);
     nh.param("fsm/manual_goal_max_z", manual_goal_max_z_, 1000.0);
     nh.param("fsm/manual_goal_max_age_s", manual_goal_max_age_s_, 0.0);
+    nh.param("fsm/manual_goal_max_future_skew_s",
+             manual_goal_max_future_skew_s_, 0.5);
     nh.param<std::string>("fsm/manual_goal_expected_frame",
                           manual_goal_expected_frame_, "");
+    manual_goal_max_future_skew_s_ =
+        std::max(0.0, manual_goal_max_future_skew_s_);
 
     have_trigger_ = !flag_realworld_experiment_;
 
@@ -231,9 +235,21 @@ namespace ego_planner
                 manual_goal_expected_frame_.c_str());
       return;
     }
-    if (manual_goal_max_age_s_ > 0.0 && !msg->header.stamp.isZero())
+    if (manual_goal_max_age_s_ > 0.0 &&
+        !msg->header.stamp.isZero() && !odom_stamp_.isZero())
     {
-      const double age = (ros::Time::now() - msg->header.stamp).toSec();
+      // Goals forwarded by DAIB-Explorer and odometry from FAST-LIVO2 share
+      // the sensor clock. ros::Time::now() may follow bag /clock or wall
+      // time, so comparing it with the sensor stamp can falsely reject every
+      // valid goal.
+      const double age = (odom_stamp_ - msg->header.stamp).toSec();
+      if (age < -manual_goal_max_future_skew_s_)
+      {
+        ROS_WARN("Reject future goal relative to odometry: skew=%.3f s, "
+                 "limit=%.3f s.",
+                 -age, manual_goal_max_future_skew_s_);
+        return;
+      }
       if (age > manual_goal_max_age_s_)
       {
         ROS_WARN("Reject stale goal: age=%.3f s, limit=%.3f s.",
@@ -267,6 +283,7 @@ namespace ego_planner
 
   void EGOReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg)
   {
+    odom_stamp_ = msg->header.stamp;
     odom_pos_(0) = msg->pose.pose.position.x;
     odom_pos_(1) = msg->pose.pose.position.y;
     odom_pos_(2) = msg->pose.pose.position.z;

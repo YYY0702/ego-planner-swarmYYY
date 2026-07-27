@@ -5,7 +5,6 @@
         output="screen">
     <rosparam command="load"
               file="$(find daib_ego_bridge)/config/bridge.yaml"/>
-    <param name="max_goal_age_s" value="0.0"/>
   </node>
 
   <test test-name="daib_ego_bridge_runtime_contract"

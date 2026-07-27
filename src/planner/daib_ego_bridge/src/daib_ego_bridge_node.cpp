@@ -69,6 +69,7 @@ private:
   double max_odom_age_s_ = 1.0;
   double max_ready_age_s_ = 2.5;
   double max_goal_age_s_ = 15.0;
+  double max_goal_future_skew_s_ = 0.5;
   double min_goal_distance_m_ = 0.5;
   double max_goal_distance_m_ = 20.0;
   double min_goal_z_m_ = -2.5;
@@ -113,6 +114,9 @@ private:
     private_nh_.param(
         "max_ready_age_s", max_ready_age_s_, max_ready_age_s_);
     private_nh_.param("max_goal_age_s", max_goal_age_s_, max_goal_age_s_);
+    private_nh_.param("max_goal_future_skew_s",
+                      max_goal_future_skew_s_,
+                      max_goal_future_skew_s_);
     private_nh_.param(
         "min_goal_distance_m", min_goal_distance_m_, min_goal_distance_m_);
     private_nh_.param(
@@ -128,6 +132,7 @@ private:
     max_odom_age_s_ = std::max(0.1, max_odom_age_s_);
     max_ready_age_s_ = std::max(0.1, max_ready_age_s_);
     max_goal_age_s_ = std::max(0.0, max_goal_age_s_);
+    max_goal_future_skew_s_ = std::max(0.0, max_goal_future_skew_s_);
     min_goal_distance_m_ = std::max(0.0, min_goal_distance_m_);
     max_goal_distance_m_ =
         std::max(min_goal_distance_m_, max_goal_distance_m_);
@@ -211,12 +216,39 @@ private:
       reason = "REJECT_BOUNDS";
       return false;
     }
-    if (max_goal_age_s_ > 0.0 && !goal.header.stamp.isZero())
+    if (max_goal_age_s_ > 0.0)
     {
-      const double age = (ros::Time::now() - goal.header.stamp).toSec();
+      double age = 0.0;
+      const bool use_sensor_time =
+          !goal.header.stamp.isZero() &&
+          !latest_odom_.header.stamp.isZero();
+      if (use_sensor_time)
+      {
+        // The DAIB odometry and planning cloud are published from the same
+        // LIO update and therefore share a clock domain. ros::Time::now()
+        // may instead follow bag /clock or wall time, so it must not be mixed
+        // with the sensor-domain goal stamp.
+        age = (latest_odom_.header.stamp - goal.header.stamp).toSec();
+        if (age < -max_goal_future_skew_s_)
+        {
+          reason = "WAIT_ODOM_SYNC";
+          ROS_WARN_STREAM_THROTTLE(
+              2.0, "[ DAIB-EGO Bridge ] goal is "
+                       << -age << " s ahead of odometry; waiting for sync");
+          return false;
+        }
+      }
+      else
+      {
+        age = (ros::WallTime::now() - last_goal_receive_).toSec();
+      }
       if (age > max_goal_age_s_)
       {
         reason = "REJECT_STALE";
+        ROS_WARN_STREAM_THROTTLE(
+            2.0, "[ DAIB-EGO Bridge ] reject stale goal: age="
+                     << age << " s, source="
+                     << (use_sensor_time ? "odom_stamp" : "wall_receive"));
         return false;
       }
     }

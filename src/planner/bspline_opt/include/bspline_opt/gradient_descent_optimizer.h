@@ -39,8 +39,8 @@ public:
 
 private:
   int variable_num_{0};
-  int iter_limit_{1e10};
-  int invoke_limit_{1e10};
+  int iter_limit_{1000000000};
+  int invoke_limit_{1000000000};
   double xtol_rel_;
   double xtol_abs_;
   double min_grad_;

@@ -83,7 +83,7 @@ generate_messages(
 )
 
 catkin_package(
-  #INCLUDE_DIRS include
+  INCLUDE_DIRS include
   LIBRARIES encode_msgs decode_msgs
   #CATKIN_DEPENDS geometry_msgs nav_msgs
   #DEPENDS system_lib
@@ -106,4 +106,3 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 #     decode_msgs 
 #     encode_msgs
 # )
-
