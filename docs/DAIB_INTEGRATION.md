@@ -50,6 +50,13 @@ roslaunch ego_planner daib_single_uav.launch
 For bag playback, pass `use_sim_time:=true` to the Explorer and EGO launch
 files and play the bag with `--clock`.
 
+FAST-LIVO2 may preserve the LiDAR's original epoch in message headers while
+`/clock` uses the bag recording epoch. This is supported: goal freshness is
+checked against the latest `/daib_slam/odom` header, because both belong to the
+same sensor-data clock domain. Wall time is used only when either header has no
+timestamp. Do not rewrite sensor headers to `ros::Time::now()` merely to make
+bag playback pass the watchdog.
+
 ## Contract
 
 Inputs consumed by this repository:
@@ -87,3 +94,9 @@ The bridge requires the Explorer's 1 Hz ready heartbeat and considers it stale
 after 2.5 seconds. The independent occupied-cloud watchdog is one second. If
 Explorer stops publishing while a trajectory is active, EGO enters its existing
 emergency-stop state instead of continuing against a stale map.
+
+The bridge accepts at most 0.5 seconds of goal lead over odometry and waits for
+odometry to catch up before forwarding such a goal. A goal more than 15 seconds
+behind the latest odometry is rejected. EGO's manual-goal guard repeats the same
+sensor-domain validation so a goal cannot pass the bridge and then be rejected
+by a wall/simulation-time comparison inside the planner.

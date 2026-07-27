@@ -11,6 +11,7 @@ expected_frame: camera_init
 max_odom_age_s: 1.0
 max_ready_age_s: 2.5
 max_goal_age_s: 15.0
+max_goal_future_skew_s: 0.5
 min_goal_distance_m: 0.5
 max_goal_distance_m: 20.0
 min_goal_z_m: -2.5
