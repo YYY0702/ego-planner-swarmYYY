@@ -17,7 +17,7 @@ roslaunch ego_planner simple_run.launch
 
 This fork adds a decoupled single-UAV pipeline for
 `FAST-LIVO2YYY -> DAIB-Explorer -> EGO-Swarm`. It preserves the Explorer's 3D
-frontier goal, validates readiness/frame/freshness/generation in the standalone
+frontier goal, validates readiness/frame/freshness and goal identity in the standalone
 `daib_ego_bridge` node, consumes the Explorer's rolling occupied cloud and
 publishes a dynamically feasible B-spline plus `/daib_ego/position_cmd`.
 

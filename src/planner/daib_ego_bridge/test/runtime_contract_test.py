@@ -18,6 +18,9 @@ class RuntimeContractTest(unittest.TestCase):
         self._goal_pub = rospy.Publisher(
             "/daib_explorer/goal", PoseStamped, queue_size=1, latch=True
         )
+        self._source_generation_pub = rospy.Publisher(
+            "/daib_explorer/generation", UInt64, queue_size=1, latch=True
+        )
         self._ready_pub = rospy.Publisher(
             "/daib_explorer/ready", Bool, queue_size=1, latch=True
         )
@@ -50,11 +53,10 @@ class RuntimeContractTest(unittest.TestCase):
         self._odom_pub.publish(odom)
 
     @staticmethod
-    def _goal(generation, frame="camera_init"):
+    def _goal(frame="camera_init"):
         goal = PoseStamped()
         goal.header.stamp = rospy.Time.now()
         goal.header.frame_id = frame
-        goal.header.seq = generation
         goal.pose.position.x = 5.0
         goal.pose.position.y = 1.0
         goal.pose.position.z = 1.5
@@ -63,11 +65,13 @@ class RuntimeContractTest(unittest.TestCase):
 
     def test_ready_frame_and_generation_gate(self):
         rate = rospy.Rate(20)
+        source_goal = self._goal()
+        self._source_generation_pub.publish(UInt64(data=7))
+        self._goal_pub.publish(source_goal)
         self._ready_pub.publish(Bool(data=False))
         deadline = rospy.Time.now() + rospy.Duration(1.0)
         while rospy.Time.now() < deadline:
             self._publish_odom()
-            self._goal_pub.publish(self._goal(7))
             rate.sleep()
         with self._lock:
             self.assertEqual(len(self._goals), 0)
@@ -82,11 +86,13 @@ class RuntimeContractTest(unittest.TestCase):
             rate.sleep()
         with self._lock:
             self.assertEqual(len(self._goals), 1)
-            self.assertEqual(self._goals[0].header.seq, 7)
+            self.assertEqual(self._goals[0].header.stamp, source_goal.header.stamp)
             self.assertEqual(self._generations[-1], 7)
 
-        self._goal_pub.publish(self._goal(7))
-        self._goal_pub.publish(self._goal(8, frame="wrong_frame"))
+        self._source_generation_pub.publish(UInt64(data=7))
+        self._goal_pub.publish(source_goal)
+        self._source_generation_pub.publish(UInt64(data=8))
+        self._goal_pub.publish(self._goal(frame="wrong_frame"))
         deadline = rospy.Time.now() + rospy.Duration(0.5)
         while rospy.Time.now() < deadline:
             self._publish_odom()

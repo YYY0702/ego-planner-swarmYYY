@@ -57,7 +57,8 @@ Inputs consumed by this repository:
 | Topic | Type | Requirement |
 |---|---|---|
 | `/daib_slam/odom` | `nav_msgs/Odometry` | `camera_init`; pose and world-frame linear velocity |
-| `/daib_explorer/goal` | `geometry_msgs/PoseStamped` | `header.seq` is the nonzero goal generation |
+| `/daib_explorer/goal` | `geometry_msgs/PoseStamped` | Timestamp and pose identify a goal |
+| `/daib_explorer/generation` | `std_msgs/UInt64` | Application-level generation for acknowledgement and telemetry |
 | `/daib_explorer/ready` | `std_msgs/Bool` | must be true before forwarding a goal |
 | `/daib_explorer/planning_cloud` | `sensor_msgs/PointCloud2` | occupied voxel centers in `camera_init` |
 
