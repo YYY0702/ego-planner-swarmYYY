@@ -100,3 +100,16 @@ odometry to catch up before forwarding such a goal. A goal more than 15 seconds
 behind the latest odometry is rejected. EGO's manual-goal guard repeats the same
 sensor-domain validation so a goal cannot pass the bridge and then be rejected
 by a wall/simulation-time comparison inside the planner.
+
+When planning is temporarily blocked, the DAIB launch performs at most three
+initial attempts and waits 0.2 wall-clock seconds before another planning
+attempt. This bounds CPU and log load without weakening collision checks. A new
+Explorer goal bypasses the old backoff and is evaluated immediately.
+
+Bag playback verifies topic contracts, target acceptance and trajectory
+generation, but it is open-loop: recorded odometry does not follow EGO's
+generated position commands. Collision recovery and repeated replanning results
+from such a run therefore are not equivalent to closed-loop simulator or flight
+results. Use the grid-map diagnostic for the current odometry pose to distinguish
+a genuinely close obstacle from a trajectory/recorded-odometry divergence; do
+not lower obstacle inflation merely to silence the warning.

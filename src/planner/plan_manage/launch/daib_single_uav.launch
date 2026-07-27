@@ -64,6 +64,9 @@
     <param name="fsm/manual_goal_max_age_s" value="15.0" type="double"/>
     <param name="fsm/manual_goal_max_future_skew_s"
            value="0.5" type="double"/>
+    <!-- Bound CPU/log load when the local map temporarily blocks replanning. -->
+    <param name="fsm/replan_failure_backoff_s" value="0.2" type="double"/>
+    <param name="fsm/initial_plan_trials" value="3" type="int"/>
     <param name="fsm/manual_goal_expected_frame"
            value="$(arg world_frame)" type="string"/>
 
