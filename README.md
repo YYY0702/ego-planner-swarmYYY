@@ -12,6 +12,23 @@ catkin_make -j1
 source devel/setup.bash
 roslaunch ego_planner simple_run.launch
 ```
+
+## DAIB resource-constrained UAV integration
+
+This fork adds a decoupled single-UAV pipeline for
+`FAST-LIVO2YYY -> DAIB-Explorer -> EGO-Swarm`. It preserves the Explorer's 3D
+frontier goal, validates readiness/frame/freshness/generation in the standalone
+`daib_ego_bridge` node, consumes the Explorer's rolling occupied cloud and
+publishes a dynamically feasible B-spline plus `/daib_ego/position_cmd`.
+
+See [`docs/DAIB_INTEGRATION.md`](docs/DAIB_INTEGRATION.md) and run:
+
+```bash
+roslaunch ego_planner daib_single_uav.launch
+```
+
+This launch does not start the simulator, RViz or PX4. The position command is
+the boundary for a later controller/offboard adapter.
 <!If your network to github is slow, We recommend you to try the gitee repository [https://gitee.com/iszhouxin/ego-planner-swarm](https://gitee.com/iszhouxin/ego-planner-swarm). They synchronize automatically./>
 
 If you find this work useful or interesting, please kindly give us a star :star:, thanks!:grinning:

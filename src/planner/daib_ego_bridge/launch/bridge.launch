@@ -1,0 +1,11 @@
+<launch>
+  <arg name="config"
+       default="$(find daib_ego_bridge)/config/bridge.yaml"/>
+  <node pkg="daib_ego_bridge"
+        type="daib_ego_bridge_node"
+        name="daib_ego_bridge"
+        output="screen"
+        respawn="false">
+    <rosparam command="load" file="$(arg config)"/>
+  </node>
+</launch>

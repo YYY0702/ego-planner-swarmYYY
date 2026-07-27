@@ -1,0 +1,155 @@
+<launch>
+  <arg name="drone_id" default="0"/>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="bridge_config"
+       default="$(find daib_ego_bridge)/config/bridge.yaml"/>
+
+  <arg name="odom_topic" default="/daib_slam/odom"/>
+  <arg name="cloud_topic" default="/daib_explorer/planning_cloud"/>
+  <arg name="planner_goal_topic" default="/daib_ego/goal"/>
+  <arg name="position_cmd_topic" default="/daib_ego/position_cmd"/>
+  <arg name="world_frame" default="camera_init"/>
+
+  <!-- Resource-constrained defaults for the RK3588 single-UAV stage. -->
+  <arg name="map_size_x" default="80.0"/>
+  <arg name="map_size_y" default="80.0"/>
+  <arg name="map_size_z" default="8.0"/>
+  <arg name="map_resolution" default="0.25"/>
+  <arg name="ground_height" default="-3.0"/>
+  <arg name="virtual_ceil_height" default="4.75"/>
+  <arg name="max_vel" default="2.0"/>
+  <arg name="max_acc" default="3.0"/>
+  <arg name="planning_horizon" default="7.5"/>
+  <arg name="use_distinctive_trajs" default="false"/>
+
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+
+  <include file="$(find daib_ego_bridge)/launch/bridge.launch">
+    <arg name="config" value="$(arg bridge_config)"/>
+  </include>
+
+  <node pkg="ego_planner"
+        type="ego_planner_node"
+        name="drone_$(arg drone_id)_ego_planner_node"
+        output="screen"
+        respawn="false">
+    <remap from="~odom_world" to="$(arg odom_topic)"/>
+    <remap from="~grid_map/odom" to="$(arg odom_topic)"/>
+    <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
+    <remap from="/move_base_simple/goal" to="$(arg planner_goal_topic)"/>
+    <remap from="~planning/bspline"
+           to="/drone_$(arg drone_id)_planning/bspline"/>
+    <remap from="~planning/data_display"
+           to="/drone_$(arg drone_id)_planning/data_display"/>
+    <remap from="~planning/broadcast_bspline_from_planner"
+           to="/broadcast_bspline"/>
+    <remap from="~planning/broadcast_bspline_to_planner"
+           to="/broadcast_bspline"/>
+
+    <!-- Continuous external goals from DAIB-Explorer. -->
+    <param name="fsm/flight_type" value="1" type="int"/>
+    <param name="fsm/thresh_replan_time" value="1.0" type="double"/>
+    <param name="fsm/thresh_no_replan_meter" value="1.0" type="double"/>
+    <param name="fsm/planning_horizon"
+           value="$(arg planning_horizon)" type="double"/>
+    <param name="fsm/planning_horizen_time" value="3.0" type="double"/>
+    <param name="fsm/emergency_time" value="1.0" type="double"/>
+    <param name="fsm/realworld_experiment" value="false" type="bool"/>
+    <param name="fsm/fail_safe" value="true" type="bool"/>
+    <param name="fsm/waypoint_num" value="0" type="int"/>
+    <param name="fsm/manual_goal_use_message_z" value="true" type="bool"/>
+    <param name="fsm/manual_goal_min_z" value="-2.5" type="double"/>
+    <param name="fsm/manual_goal_max_z" value="4.5" type="double"/>
+    <param name="fsm/manual_goal_max_age_s" value="15.0" type="double"/>
+    <param name="fsm/manual_goal_expected_frame"
+           value="$(arg world_frame)" type="string"/>
+
+    <!-- World-frame local occupied cloud supplied by DAIB-Explorer. -->
+    <param name="grid_map/resolution"
+           value="$(arg map_resolution)" type="double"/>
+    <param name="grid_map/map_size_x"
+           value="$(arg map_size_x)" type="double"/>
+    <param name="grid_map/map_size_y"
+           value="$(arg map_size_y)" type="double"/>
+    <param name="grid_map/map_size_z"
+           value="$(arg map_size_z)" type="double"/>
+    <param name="grid_map/local_update_range_x" value="10.0" type="double"/>
+    <param name="grid_map/local_update_range_y" value="10.0" type="double"/>
+    <param name="grid_map/local_update_range_z" value="6.0" type="double"/>
+    <param name="grid_map/obstacles_inflation" value="0.5" type="double"/>
+    <param name="grid_map/local_map_margin" value="4" type="int"/>
+    <param name="grid_map/ground_height"
+           value="$(arg ground_height)" type="double"/>
+    <param name="grid_map/virtual_ceil_height"
+           value="$(arg virtual_ceil_height)" type="double"/>
+    <param name="grid_map/visualization_truncate_height"
+           value="$(arg virtual_ceil_height)" type="double"/>
+    <param name="grid_map/frame_id"
+           value="$(arg world_frame)" type="string"/>
+    <param name="grid_map/pose_type" value="2" type="int"/>
+    <param name="grid_map/cloud_timeout" value="1.0" type="double"/>
+    <param name="grid_map/fail_on_cloud_timeout" value="true" type="bool"/>
+    <param name="grid_map/odom_depth_timeout" value="1.0" type="double"/>
+    <param name="grid_map/show_occ_time" value="false" type="bool"/>
+
+    <!-- Unused depth-camera parameters remain valid for upstream code paths. -->
+    <param name="grid_map/cx" value="320.0"/>
+    <param name="grid_map/cy" value="240.0"/>
+    <param name="grid_map/fx" value="400.0"/>
+    <param name="grid_map/fy" value="400.0"/>
+    <param name="grid_map/use_depth_filter" value="true"/>
+    <param name="grid_map/depth_filter_tolerance" value="0.15"/>
+    <param name="grid_map/depth_filter_maxdist" value="5.0"/>
+    <param name="grid_map/depth_filter_mindist" value="0.2"/>
+    <param name="grid_map/depth_filter_margin" value="2"/>
+    <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
+    <param name="grid_map/skip_pixel" value="2"/>
+    <param name="grid_map/p_hit" value="0.65"/>
+    <param name="grid_map/p_miss" value="0.35"/>
+    <param name="grid_map/p_min" value="0.12"/>
+    <param name="grid_map/p_max" value="0.90"/>
+    <param name="grid_map/p_occ" value="0.80"/>
+    <param name="grid_map/min_ray_length" value="0.1"/>
+    <param name="grid_map/max_ray_length" value="10.0"/>
+
+    <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
+    <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
+    <param name="manager/max_jerk" value="4.0" type="double"/>
+    <param name="manager/control_points_distance" value="0.5" type="double"/>
+    <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
+    <param name="manager/planning_horizon"
+           value="$(arg planning_horizon)" type="double"/>
+    <param name="manager/use_distinctive_trajs"
+           value="$(arg use_distinctive_trajs)" type="bool"/>
+    <param name="manager/drone_id" value="$(arg drone_id)" type="int"/>
+
+    <param name="optimization/lambda_smooth" value="1.0"/>
+    <param name="optimization/lambda_collision" value="0.8"/>
+    <param name="optimization/lambda_feasibility" value="0.2"/>
+    <param name="optimization/lambda_fitness" value="1.0"/>
+    <param name="optimization/dist0" value="0.8"/>
+    <param name="optimization/swarm_clearance" value="1.0"/>
+    <param name="optimization/max_vel" value="$(arg max_vel)"/>
+    <param name="optimization/max_acc" value="$(arg max_acc)"/>
+    <param name="bspline/limit_vel" value="$(arg max_vel)"/>
+    <param name="bspline/limit_acc" value="$(arg max_acc)"/>
+    <param name="bspline/limit_ratio" value="1.1"/>
+
+    <param name="prediction/obj_num" value="0" type="int"/>
+    <param name="prediction/lambda" value="1.0"/>
+    <param name="prediction/predict_rate" value="1.0"/>
+  </node>
+
+  <node pkg="ego_planner"
+        type="traj_server"
+        name="drone_$(arg drone_id)_traj_server"
+        output="screen"
+        respawn="false">
+    <remap from="~planning/bspline"
+           to="/drone_$(arg drone_id)_planning/bspline"/>
+    <remap from="/position_cmd" to="$(arg position_cmd_topic)"/>
+    <param name="traj_server/time_forward" value="1.0" type="double"/>
+    <param name="traj_server/frame_id"
+           value="$(arg world_frame)" type="string"/>
+  </node>
+</launch>

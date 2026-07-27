@@ -1,0 +1,18 @@
+topics:
+  explorer_goal: /daib_explorer/goal
+  explorer_ready: /daib_explorer/ready
+  odom: /daib_slam/odom
+  planner_goal: /daib_ego/goal
+  accepted_generation: /daib_ego/accepted_generation
+  state: /daib_ego/bridge_state
+
+expected_frame: camera_init
+require_nonzero_generation: true
+max_odom_age_s: 1.0
+max_ready_age_s: 2.5
+max_goal_age_s: 15.0
+min_goal_distance_m: 0.5
+max_goal_distance_m: 20.0
+min_goal_z_m: -2.5
+max_goal_z_m: 4.5
+watchdog_rate_hz: 10.0

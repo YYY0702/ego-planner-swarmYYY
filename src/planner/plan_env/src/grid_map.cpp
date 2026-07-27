@@ -52,6 +52,10 @@ void GridMap::initMap(ros::NodeHandle &nh)
   node_.param("grid_map/ground_height", mp_.ground_height_, 1.0);
 
   node_.param("grid_map/odom_depth_timeout", mp_.odom_depth_timeout_, 1.0);
+  node_.param("grid_map/cloud_timeout", mp_.cloud_timeout_, 1.0);
+  node_.param(
+      "grid_map/fail_on_cloud_timeout", mp_.fail_on_cloud_timeout_, false);
+  mp_.cloud_timeout_ = std::max(0.1, mp_.cloud_timeout_);
 
   if( mp_.virtual_ceil_height_ - mp_.ground_height_ > z_size)
   {
@@ -146,6 +150,7 @@ void GridMap::initMap(ros::NodeHandle &nh)
   md_.has_cloud_ = false;
   md_.image_cnt_ = 0;
   md_.last_occ_update_time_.fromSec(0);
+  md_.last_cloud_receive_wall_time_ = ros::WallTime::now();
 
   md_.fuse_time_ = 0.0;
   md_.update_num_ = 0;
@@ -662,6 +667,18 @@ void GridMap::visCallback(const ros::TimerEvent & /*event*/)
 
 void GridMap::updateOccupancyCallback(const ros::TimerEvent & /*event*/)
 {
+  if (!md_.flag_use_depth_fusion && mp_.fail_on_cloud_timeout_)
+  {
+    const double cloud_age =
+        (ros::WallTime::now() - md_.last_cloud_receive_wall_time_).toSec();
+    if (cloud_age > mp_.cloud_timeout_)
+    {
+      if (!md_.flag_depth_odom_timeout_)
+        ROS_ERROR("Independent cloud lost for %.3f s.", cloud_age);
+      md_.flag_depth_odom_timeout_ = true;
+    }
+  }
+
   if (md_.last_occ_update_time_.toSec() < 1.0 ) md_.last_occ_update_time_ = ros::Time::now();
   
   if (!md_.occ_need_update_)
@@ -744,6 +761,14 @@ void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
 {
   if (md_.has_first_depth_)
     return;
+  if (!odom->header.frame_id.empty() &&
+      odom->header.frame_id != mp_.frame_id_)
+  {
+    ROS_ERROR_THROTTLE(
+        1.0, "Reject grid-map odometry frame '%s'; expected '%s'.",
+        odom->header.frame_id.c_str(), mp_.frame_id_.c_str());
+    return;
+  }
 
   md_.camera_pos_(0) = odom->pose.pose.position.x;
   md_.camera_pos_(1) = odom->pose.pose.position.y;
@@ -754,11 +779,17 @@ void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
 
 void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 {
+  if (!img->header.frame_id.empty() &&
+      img->header.frame_id != mp_.frame_id_)
+  {
+    ROS_ERROR_THROTTLE(
+        1.0, "Reject grid-map cloud frame '%s'; expected '%s'.",
+        img->header.frame_id.c_str(), mp_.frame_id_.c_str());
+    return;
+  }
 
   pcl::PointCloud<pcl::PointXYZ> latest_cloud;
   pcl::fromROSMsg(*img, latest_cloud);
-
-  md_.has_cloud_ = true;
 
   if (!md_.has_odom_)
   {
@@ -766,10 +797,18 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
     return;
   }
 
-  if (latest_cloud.points.size() == 0)
+  if (isnan(md_.camera_pos_(0)) || isnan(md_.camera_pos_(1)) ||
+      isnan(md_.camera_pos_(2)))
     return;
 
-  if (isnan(md_.camera_pos_(0)) || isnan(md_.camera_pos_(1)) || isnan(md_.camera_pos_(2)))
+  // An empty occupied cloud is still a valid heartbeat from the independent
+  // mapper (for example in open space). Keep the previous conservative map
+  // contents, but do not report the upstream process as lost.
+  md_.has_cloud_ = true;
+  md_.last_cloud_receive_wall_time_ = ros::WallTime::now();
+  if (!md_.flag_use_depth_fusion)
+    md_.flag_depth_odom_timeout_ = false;
+  if (latest_cloud.points.empty())
     return;
 
   this->resetBuffer(md_.camera_pos_ - mp_.local_update_range_,
@@ -961,7 +1000,10 @@ void GridMap::publishMapInflate(bool all_info)
 
 bool GridMap::odomValid() { return md_.has_odom_; }
 
-bool GridMap::hasDepthObservation() { return md_.has_first_depth_; }
+bool GridMap::hasDepthObservation()
+{
+  return md_.has_first_depth_ || md_.has_cloud_;
+}
 
 Eigen::Vector3d GridMap::getOrigin() { return mp_.map_origin_; }
 

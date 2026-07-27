@@ -62,6 +62,12 @@ namespace ego_planner
     double emergency_time_;
     bool flag_realworld_experiment_;
     bool enable_fail_safe_;
+    bool manual_goal_use_message_z_;
+    double manual_goal_altitude_;
+    double manual_goal_min_z_;
+    double manual_goal_max_z_;
+    double manual_goal_max_age_s_;
+    std::string manual_goal_expected_frame_;
 
     /* planning data */
     bool have_trigger_, have_target_, have_odom_, have_new_target_, have_recv_pre_agent_;

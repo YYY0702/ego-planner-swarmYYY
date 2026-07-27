@@ -60,6 +60,8 @@ struct MappingParameters {
 
   /* time out */
   double odom_depth_timeout_;
+  double cloud_timeout_;
+  bool fail_on_cloud_timeout_;
 
   /* depth image projection filtering */
   double depth_filter_maxdist_, depth_filter_mindist_, depth_filter_tolerance_;
@@ -112,6 +114,7 @@ struct MappingData {
 
   // odom_depth_timeout_
   ros::Time last_occ_update_time_;
+  ros::WallTime last_cloud_receive_wall_time_;
   bool flag_depth_odom_timeout_;
   bool flag_use_depth_fusion;
 

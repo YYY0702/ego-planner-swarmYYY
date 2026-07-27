@@ -1,0 +1,15 @@
+<launch>
+  <node pkg="daib_ego_bridge"
+        type="daib_ego_bridge_node"
+        name="daib_ego_bridge_contract_test_node"
+        output="screen">
+    <rosparam command="load"
+              file="$(find daib_ego_bridge)/config/bridge.yaml"/>
+    <param name="max_goal_age_s" value="0.0"/>
+  </node>
+
+  <test test-name="daib_ego_bridge_runtime_contract"
+        pkg="daib_ego_bridge"
+        type="runtime_contract_test.py"
+        time-limit="15.0"/>
+</launch>

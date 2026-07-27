@@ -1,6 +1,8 @@
 
 #include <plan_manage/ego_replan_fsm.h>
 
+#include <cmath>
+
 namespace ego_planner
 {
 
@@ -21,6 +23,14 @@ namespace ego_planner
     nh.param("fsm/emergency_time", emergency_time_, 1.0);
     nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
+    nh.param("fsm/manual_goal_use_message_z",
+             manual_goal_use_message_z_, false);
+    nh.param("fsm/manual_goal_altitude", manual_goal_altitude_, 1.0);
+    nh.param("fsm/manual_goal_min_z", manual_goal_min_z_, -1000.0);
+    nh.param("fsm/manual_goal_max_z", manual_goal_max_z_, 1000.0);
+    nh.param("fsm/manual_goal_max_age_s", manual_goal_max_age_s_, 0.0);
+    nh.param<std::string>("fsm/manual_goal_expected_frame",
+                          manual_goal_expected_frame_, "");
 
     have_trigger_ = !flag_realworld_experiment_;
 
@@ -182,15 +192,13 @@ namespace ego_planner
       /*** FSM ***/
       if (exec_state_ == WAIT_TARGET)
         changeFSMExecState(GEN_NEW_TRAJ, "TRIG");
-      else
-      {
-        while (exec_state_ != EXEC_TRAJ)
-        {
-          ros::spinOnce();
-          ros::Duration(0.001).sleep();
-        }
+      else if (exec_state_ == EXEC_TRAJ)
         changeFSMExecState(REPLAN_TRAJ, "TRIG");
-      }
+      // INIT will naturally advance through WAIT_TARGET. If a new target
+      // arrives while GEN_NEW_TRAJ or REPLAN_TRAJ is already running, the
+      // global reference above has been replaced and the existing FSM state
+      // will consume it. Never block this ROS callback waiting for another
+      // callback/timer to change the state.
 
       // visualization_->displayGoalPoint(end_pt_, Eigen::Vector4d(1, 0, 0, 1), 0.3, 0);
       visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
@@ -210,14 +218,49 @@ namespace ego_planner
 
   void EGOReplanFSM::waypointCallback(const geometry_msgs::PoseStampedPtr &msg)
   {
-    if (msg->pose.position.z < -0.1)
+    if (!have_odom_)
+    {
+      ROS_WARN_THROTTLE(1.0, "Reject goal: odometry is not ready.");
       return;
+    }
+    if (!manual_goal_expected_frame_.empty() &&
+        msg->header.frame_id != manual_goal_expected_frame_)
+    {
+      ROS_ERROR("Reject goal in frame '%s'; expected '%s'.",
+                msg->header.frame_id.c_str(),
+                manual_goal_expected_frame_.c_str());
+      return;
+    }
+    if (manual_goal_max_age_s_ > 0.0 && !msg->header.stamp.isZero())
+    {
+      const double age = (ros::Time::now() - msg->header.stamp).toSec();
+      if (age > manual_goal_max_age_s_)
+      {
+        ROS_WARN("Reject stale goal: age=%.3f s, limit=%.3f s.",
+                 age, manual_goal_max_age_s_);
+        return;
+      }
+    }
+
+    const double goal_z = manual_goal_use_message_z_
+                              ? msg->pose.position.z
+                              : manual_goal_altitude_;
+    if (!std::isfinite(msg->pose.position.x) ||
+        !std::isfinite(msg->pose.position.y) ||
+        !std::isfinite(goal_z) ||
+        goal_z < manual_goal_min_z_ || goal_z > manual_goal_max_z_)
+    {
+      ROS_ERROR("Reject invalid goal=(%.3f, %.3f, %.3f).",
+                msg->pose.position.x, msg->pose.position.y, goal_z);
+      return;
+    }
 
     cout << "Triggered!" << endl;
-    // trigger_ = true;
+    have_trigger_ = true;
     init_pt_ = odom_pos_;
 
-    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, 1.0);
+    Eigen::Vector3d end_wp(
+        msg->pose.position.x, msg->pose.position.y, goal_z);
 
     planNextWaypoint(end_wp);
   }
