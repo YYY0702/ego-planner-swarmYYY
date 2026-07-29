@@ -13,6 +13,29 @@ namespace ego_planner
     init_list_pub = nh.advertise<visualization_msgs::Marker>("init_list", 2);
     optimal_list_pub = nh.advertise<visualization_msgs::Marker>("optimal_list", 2);
     a_star_list_pub = nh.advertise<visualization_msgs::Marker>("a_star_list", 20);
+    nh.param<std::string>("visualization/frame_id", frame_id_, "world");
+    nh.param("visualization/show_debug_paths", show_debug_paths_, true);
+  }
+
+  void PlanningVisualization::deleteMarkerList(ros::Publisher &pub, int id)
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = frame_id_;
+    marker.header.stamp = ros::Time::now();
+    marker.action = visualization_msgs::Marker::DELETE;
+    marker.id = id;
+    pub.publish(marker);
+    marker.id = id + 1000;
+    pub.publish(marker);
+  }
+
+  void PlanningVisualization::deleteAll(ros::Publisher &pub)
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = frame_id_;
+    marker.header.stamp = ros::Time::now();
+    marker.action = visualization_msgs::Marker::DELETEALL;
+    pub.publish(marker);
   }
 
   // // real ids used: {id, id+1000}
@@ -20,7 +43,8 @@ namespace ego_planner
                                                 Eigen::Vector4d color, int id, bool show_sphere /* = true */ )
   {
     visualization_msgs::Marker sphere, line_strip;
-    sphere.header.frame_id = line_strip.header.frame_id = "world";
+    deleteMarkerList(pub, id);
+    sphere.header.frame_id = line_strip.header.frame_id = frame_id_;
     sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
     sphere.type = visualization_msgs::Marker::SPHERE_LIST;
     line_strip.type = visualization_msgs::Marker::LINE_STRIP;
@@ -55,7 +79,7 @@ namespace ego_planner
                                                        const vector<Eigen::Vector3d> &list, double scale, Eigen::Vector4d color, int id)
   {
     visualization_msgs::Marker sphere, line_strip;
-    sphere.header.frame_id = line_strip.header.frame_id = "map";
+    sphere.header.frame_id = line_strip.header.frame_id = frame_id_;
     sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
     sphere.type = visualization_msgs::Marker::SPHERE_LIST;
     line_strip.type = visualization_msgs::Marker::LINE_STRIP;
@@ -90,7 +114,7 @@ namespace ego_planner
                                                         const vector<Eigen::Vector3d> &list, double scale, Eigen::Vector4d color, int id)
   {
     visualization_msgs::Marker arrow;
-    arrow.header.frame_id = "map";
+    arrow.header.frame_id = frame_id_;
     arrow.header.stamp = ros::Time::now();
     arrow.type = visualization_msgs::Marker::ARROW;
     arrow.action = visualization_msgs::Marker::ADD;
@@ -131,7 +155,7 @@ namespace ego_planner
   void PlanningVisualization::displayGoalPoint(Eigen::Vector3d goal_point, Eigen::Vector4d color, const double scale, int id)
   {
     visualization_msgs::Marker sphere;
-    sphere.header.frame_id = "world";
+    sphere.header.frame_id = frame_id_;
     sphere.header.stamp = ros::Time::now();
     sphere.type = visualization_msgs::Marker::SPHERE;
     sphere.action = visualization_msgs::Marker::ADD;
@@ -167,7 +191,7 @@ namespace ego_planner
   void PlanningVisualization::displayMultiInitPathList(vector<vector<Eigen::Vector3d>> init_trajs, const double scale)
   {
 
-    if (init_list_pub.getNumSubscribers() == 0)
+    if (!show_debug_paths_ || init_list_pub.getNumSubscribers() == 0)
     {
       return;
     }
@@ -196,7 +220,7 @@ namespace ego_planner
   void PlanningVisualization::displayInitPathList(vector<Eigen::Vector3d> init_pts, const double scale, int id)
   {
 
-    if (init_list_pub.getNumSubscribers() == 0)
+    if (!show_debug_paths_ || init_list_pub.getNumSubscribers() == 0)
     {
       return;
     }
@@ -208,7 +232,7 @@ namespace ego_planner
   void PlanningVisualization::displayOptimalList(Eigen::MatrixXd optimal_pts, int id)
   {
 
-    if (optimal_list_pub.getNumSubscribers() == 0)
+    if (!show_debug_paths_ || optimal_list_pub.getNumSubscribers() == 0)
     {
       return;
     }
@@ -223,13 +247,51 @@ namespace ego_planner
     displayMarkerList(optimal_list_pub, list, 0.15, color, id);
   }
 
-  void PlanningVisualization::displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id /* = Eigen::Vector4d(0.5,0.5,0,1)*/)
+  void PlanningVisualization::displayActiveTrajectory(
+      const vector<Eigen::Vector3d> &points, const double scale, int id)
   {
-
-    if (a_star_list_pub.getNumSubscribers() == 0)
+    if (optimal_list_pub.getNumSubscribers() == 0)
     {
       return;
     }
+    const Eigen::Vector4d color(1.0, 0.15, 0.05, 1.0);
+    displayMarkerList(optimal_list_pub, points, scale, color, id, false);
+  }
+
+  void PlanningVisualization::clearReferenceAndDebugMarkers()
+  {
+    deleteAll(global_list_pub);
+    deleteAll(init_list_pub);
+    deleteAll(a_star_list_pub);
+    last_a_star_count_ = 0;
+  }
+
+  void PlanningVisualization::clearTrajectoryMarkers()
+  {
+    clearReferenceAndDebugMarkers();
+    deleteAll(optimal_list_pub);
+  }
+
+  bool PlanningVisualization::hasActiveTrajectorySubscriber() const
+  {
+    return optimal_list_pub.getNumSubscribers() > 0;
+  }
+
+  void PlanningVisualization::displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id /* = Eigen::Vector4d(0.5,0.5,0,1)*/)
+  {
+
+    if (!show_debug_paths_ || a_star_list_pub.getNumSubscribers() == 0)
+    {
+      return;
+    }
+
+    for (int previous = 0; previous < last_a_star_count_; ++previous)
+    {
+      deleteMarkerList(
+          a_star_list_pub, last_a_star_base_id_ + previous);
+    }
+    last_a_star_base_id_ = id;
+    last_a_star_count_ = static_cast<int>(a_star_paths.size());
 
     int i = 0;
     vector<Eigen::Vector3d> list;

@@ -113,3 +113,22 @@ from such a run therefore are not equivalent to closed-loop simulator or flight
 results. Use the grid-map diagnostic for the current odometry pose to distinguish
 a genuinely close obstacle from a trajectory/recorded-odometry divergence; do
 not lower obstacle inflation merely to silence the warning.
+
+## Active trajectory continuity and RViz display
+
+The DAIB launch keeps trajectory optimization event-driven/approximately 1 Hz,
+while a separate 10 Hz visualization timer samples only the unexecuted part of
+the current B-spline at 0.05 s intervals. RViz therefore shows the smooth
+B-spline itself rather than the angular control polygon. Stable marker IDs are
+deleted before replacement, and trajectory markers are cleared on goal
+completion or emergency stop. Every marker uses `camera_init`.
+Initialization, failed-candidate and A* debug paths are hidden by default in
+DAIB mode; set `visualization/show_debug_paths=true` when diagnosing the
+optimizer.
+
+Normal replanning continues from the position, velocity and acceleration of
+the current B-spline to preserve continuity. If FAST-LIVO2 odometry differs
+from that planned state by more than 0.5 m or 0.8 m/s, EGO instead seeds the
+next trajectory from current odometry. Set either threshold to `0` to disable
+that error channel. Bag playback is not closed-loop, so recorded odometry will
+not follow EGO commands and may intentionally trigger this protection.

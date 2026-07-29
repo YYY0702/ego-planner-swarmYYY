@@ -69,6 +69,11 @@ namespace ego_planner
     double manual_goal_max_age_s_;
     double manual_goal_max_future_skew_s_;
     double replan_failure_backoff_s_;
+    double replan_from_odom_position_error_m_;
+    double replan_from_odom_velocity_error_mps_;
+    double active_traj_visualization_rate_hz_;
+    double active_traj_sample_dt_s_;
+    bool show_global_reference_;
     int initial_plan_trials_;
     std::string manual_goal_expected_frame_;
 
@@ -89,10 +94,12 @@ namespace ego_planner
     int current_wp_;
 
     bool flag_escape_emergency_;
+    bool active_traj_visible_ = false;
+    bool visualization_cleanup_pending_ = true;
 
     /* ROS utils */
     ros::NodeHandle node_;
-    ros::Timer exec_timer_, safety_timer_;
+    ros::Timer exec_timer_, safety_timer_, visualization_timer_;
     ros::Subscriber waypoint_sub_, odom_sub_, swarm_trajs_sub_, broadcast_bspline_sub_, trigger_sub_;
     ros::Publisher replan_pub_, new_pub_, bspline_pub_, data_disp_pub_, swarm_trajs_pub_, broadcast_bspline_pub_;
 
@@ -114,6 +121,7 @@ namespace ego_planner
     /* ROS functions */
     void execFSMCallback(const ros::TimerEvent &e);
     void checkCollisionCallback(const ros::TimerEvent &e);
+    void activeTrajectoryVisualizationCallback(const ros::TimerEvent &e);
     void waypointCallback(const geometry_msgs::PoseStampedPtr &msg);
     void triggerCallback(const geometry_msgs::PoseStampedPtr &msg);
     void odometryCallback(const nav_msgs::OdometryConstPtr &msg);

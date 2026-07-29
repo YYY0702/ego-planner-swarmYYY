@@ -34,12 +34,30 @@ namespace ego_planner
              manual_goal_max_future_skew_s_, 0.5);
     nh.param("fsm/replan_failure_backoff_s",
              replan_failure_backoff_s_, 0.2);
+    nh.param("fsm/replan_from_odom_position_error_m",
+             replan_from_odom_position_error_m_, 0.5);
+    nh.param("fsm/replan_from_odom_velocity_error_mps",
+             replan_from_odom_velocity_error_mps_, 0.8);
+    nh.param("visualization/active_traj_rate_hz",
+             active_traj_visualization_rate_hz_, 10.0);
+    nh.param("visualization/active_traj_sample_dt_s",
+             active_traj_sample_dt_s_, 0.05);
+    nh.param("visualization/show_global_reference",
+             show_global_reference_, false);
     nh.param("fsm/initial_plan_trials", initial_plan_trials_, 3);
     nh.param<std::string>("fsm/manual_goal_expected_frame",
                           manual_goal_expected_frame_, "");
     manual_goal_max_future_skew_s_ =
         std::max(0.0, manual_goal_max_future_skew_s_);
     replan_failure_backoff_s_ = std::max(0.0, replan_failure_backoff_s_);
+    replan_from_odom_position_error_m_ =
+        std::max(0.0, replan_from_odom_position_error_m_);
+    replan_from_odom_velocity_error_mps_ =
+        std::max(0.0, replan_from_odom_velocity_error_mps_);
+    active_traj_visualization_rate_hz_ =
+        std::max(0.5, active_traj_visualization_rate_hz_);
+    active_traj_sample_dt_s_ =
+        std::max(0.01, active_traj_sample_dt_s_);
     initial_plan_trials_ = std::max(1, initial_plan_trials_);
 
     have_trigger_ = !flag_realworld_experiment_;
@@ -62,6 +80,15 @@ namespace ego_planner
     /* callback */
     exec_timer_ = nh.createTimer(ros::Duration(0.01), &EGOReplanFSM::execFSMCallback, this);
     safety_timer_ = nh.createTimer(ros::Duration(0.05), &EGOReplanFSM::checkCollisionCallback, this);
+    visualization_timer_ = nh.createTimer(
+        ros::Duration(1.0 / active_traj_visualization_rate_hz_),
+        &EGOReplanFSM::activeTrajectoryVisualizationCallback, this);
+    ROS_INFO_STREAM(
+        "[ EGO active trajectory ] visualization="
+        << active_traj_visualization_rate_hz_ << " Hz, sample_dt="
+        << active_traj_sample_dt_s_ << " s, odom_reanchor="
+        << replan_from_odom_position_error_m_ << " m/"
+        << replan_from_odom_velocity_error_mps_ << " m/s");
 
     odom_sub_ = nh.subscribe("odom_world", 1, &EGOReplanFSM::odometryCallback, this);
 
@@ -211,7 +238,9 @@ namespace ego_planner
       // callback/timer to change the state.
 
       // visualization_->displayGoalPoint(end_pt_, Eigen::Vector4d(1, 0, 0, 1), 0.3, 0);
-      visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
+      visualization_->clearReferenceAndDebugMarkers();
+      if (show_global_reference_)
+        visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
     }
     else
     {
@@ -656,6 +685,8 @@ namespace ego_planner
         {
           have_target_ = false;
           have_trigger_ = false;
+          visualization_->clearTrajectoryMarkers();
+          active_traj_visible_ = false;
 
           if (target_type_ == TARGET_TYPE::PRESET_TARGET)
           {
@@ -686,6 +717,8 @@ namespace ego_planner
       if (flag_escape_emergency_) // Avoiding repeated calls
       {
         callEmergencyStop(odom_pos_);
+        visualization_->clearTrajectoryMarkers();
+        active_traj_visible_ = false;
       }
       else
       {
@@ -736,6 +769,7 @@ namespace ego_planner
     LocalTrajData *info = &planner_manager_->local_data_;
     ros::Time time_now = ros::Time::now();
     double t_cur = (time_now - info->start_time_).toSec();
+    t_cur = std::max(0.0, std::min(info->duration_, t_cur));
 
     //cout << "info->velocity_traj_=" << info->velocity_traj_.get_control_points() << endl;
 
@@ -743,7 +777,26 @@ namespace ego_planner
     start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_cur);
     start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_cur);
 
-    bool success = callReboundReplan(false, false);
+    const double position_error = (odom_pos_ - start_pt_).norm();
+    const double velocity_error = (odom_vel_ - start_vel_).norm();
+    const bool reanchor_to_odom =
+        (replan_from_odom_position_error_m_ > 0.0 &&
+         position_error > replan_from_odom_position_error_m_) ||
+        (replan_from_odom_velocity_error_mps_ > 0.0 &&
+         velocity_error > replan_from_odom_velocity_error_mps_);
+    if (reanchor_to_odom)
+    {
+      start_pt_ = odom_pos_;
+      start_vel_ = odom_vel_;
+      start_acc_.setZero();
+      ROS_WARN_THROTTLE(
+          1.0,
+          "Tracking error exceeded replan threshold; anchor new trajectory "
+          "to odometry (position=%.3f m, velocity=%.3f m/s).",
+          position_error, velocity_error);
+    }
+
+    bool success = callReboundReplan(reanchor_to_odom, false);
 
     if (!success)
     {
@@ -765,6 +818,47 @@ namespace ego_planner
     }
 
     return true;
+  }
+
+  void EGOReplanFSM::activeTrajectoryVisualizationCallback(
+      const ros::TimerEvent &)
+  {
+    const bool trajectory_active =
+        have_target_ &&
+        (exec_state_ == EXEC_TRAJ || exec_state_ == REPLAN_TRAJ) &&
+        planner_manager_ && planner_manager_->local_data_.duration_ > 0.0;
+    if (!trajectory_active)
+    {
+      if (visualization_->hasActiveTrajectorySubscriber() &&
+          (active_traj_visible_ || visualization_cleanup_pending_))
+      {
+        visualization_->clearTrajectoryMarkers();
+        active_traj_visible_ = false;
+        visualization_cleanup_pending_ = false;
+      }
+      return;
+    }
+    if (!visualization_->hasActiveTrajectorySubscriber())
+      return;
+    if (visualization_cleanup_pending_)
+    {
+      visualization_->clearTrajectoryMarkers();
+      visualization_cleanup_pending_ = false;
+    }
+
+    const LocalTrajData &info = planner_manager_->local_data_;
+    double t_cur = (ros::Time::now() - info.start_time_).toSec();
+    t_cur = std::max(0.0, std::min(info.duration_, t_cur));
+    std::vector<Eigen::Vector3d> future;
+    const std::size_t sample_count = static_cast<std::size_t>(
+        std::ceil((info.duration_ - t_cur) / active_traj_sample_dt_s_)) + 1U;
+    future.reserve(sample_count);
+    for (double t = t_cur; t < info.duration_;
+         t += active_traj_sample_dt_s_)
+      future.push_back(info.position_traj_.evaluateDeBoorT(t));
+    future.push_back(info.position_traj_.evaluateDeBoorT(info.duration_));
+    visualization_->displayActiveTrajectory(future, 0.08, 0);
+    active_traj_visible_ = true;
   }
 
   void EGOReplanFSM::checkCollisionCallback(const ros::TimerEvent &e)
@@ -890,8 +984,9 @@ namespace ego_planner
 
       /* 2. publish traj to the next drone of swarm */
 
-      /* 3. publish traj for visualization */
-      visualization_->displayOptimalList(info->position_traj_.get_control_points(), 0);
+      /* 3. The 10 Hz visualization timer samples the actual B-spline.
+       * Drawing the control polygon here makes a smooth trajectory look
+       * artificially angular and leaves obsolete debug geometry in RViz. */
     }
 
     return plan_and_refine_success;

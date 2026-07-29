@@ -29,6 +29,11 @@ roslaunch ego_planner daib_single_uav.launch
 
 This launch does not start the simulator, RViz or PX4. The position command is
 the boundary for a later controller/offboard adapter.
+
+The DAIB launch visualizes a 10 Hz sampled future B-spline in `camera_init`,
+clears obsolete RViz markers, and re-anchors replanning to FAST-LIVO2 odometry
+only when configurable position or velocity tracking-error thresholds are
+exceeded.
 <!If your network to github is slow, We recommend you to try the gitee repository [https://gitee.com/iszhouxin/ego-planner-swarm](https://gitee.com/iszhouxin/ego-planner-swarm). They synchronize automatically./>
 
 If you find this work useful or interesting, please kindly give us a star :star:, thanks!:grinning:

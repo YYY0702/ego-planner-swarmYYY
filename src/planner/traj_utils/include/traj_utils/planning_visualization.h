@@ -7,6 +7,7 @@
 #include <iostream>
 //#include <bspline_opt/polynomial_traj.h>
 #include <ros/ros.h>
+#include <string>
 #include <vector>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -27,6 +28,13 @@ namespace ego_planner
     ros::Publisher a_star_list_pub;
     ros::Publisher guide_vector_pub;
     ros::Publisher intermediate_state_pub;
+    std::string frame_id_ = "world";
+    bool show_debug_paths_ = true;
+    int last_a_star_base_id_ = 0;
+    int last_a_star_count_ = 0;
+
+    void deleteMarkerList(ros::Publisher &pub, int id);
+    void deleteAll(ros::Publisher &pub);
 
   public:
     PlanningVisualization(/* args */) {}
@@ -46,8 +54,13 @@ namespace ego_planner
     void displayInitPathList(vector<Eigen::Vector3d> init_pts, const double scale, int id);
     void displayMultiInitPathList(vector<vector<Eigen::Vector3d>> init_trajs, const double scale);
     void displayOptimalList(Eigen::MatrixXd optimal_pts, int id);
+    void displayActiveTrajectory(const vector<Eigen::Vector3d> &points,
+                                 const double scale, int id);
     void displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id);
     void displayArrowList(ros::Publisher &pub, const vector<Eigen::Vector3d> &list, double scale, Eigen::Vector4d color, int id);
+    void clearReferenceAndDebugMarkers();
+    void clearTrajectoryMarkers();
+    bool hasActiveTrajectorySubscriber() const;
     // void displayIntermediateState(ros::Publisher& intermediate_pub, ego_planner::BsplineOptimizer::Ptr optimizer, double sleep_time, const int start_iteration);
     // void displayNewArrow(ros::Publisher& guide_vector_pub, ego_planner::BsplineOptimizer::Ptr optimizer);
   };

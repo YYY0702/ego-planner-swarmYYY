@@ -67,8 +67,27 @@
     <!-- Bound CPU/log load when the local map temporarily blocks replanning. -->
     <param name="fsm/replan_failure_backoff_s" value="0.2" type="double"/>
     <param name="fsm/initial_plan_trials" value="3" type="int"/>
+    <!-- Preserve smooth continuation while tracking is accurate. Re-anchor
+         to current FAST-LIVO2 odometry only after material tracking error. -->
+    <param name="fsm/replan_from_odom_position_error_m"
+           value="0.5" type="double"/>
+    <param name="fsm/replan_from_odom_velocity_error_mps"
+           value="0.8" type="double"/>
     <param name="fsm/manual_goal_expected_frame"
            value="$(arg world_frame)" type="string"/>
+
+    <!-- Draw the sampled future B-spline rather than its angular control
+         polygon. Stable IDs and explicit deletion prevent stale RViz paths. -->
+    <param name="visualization/frame_id"
+           value="$(arg world_frame)" type="string"/>
+    <param name="visualization/active_traj_rate_hz"
+           value="10.0" type="double"/>
+    <param name="visualization/active_traj_sample_dt_s"
+           value="0.05" type="double"/>
+    <param name="visualization/show_global_reference"
+           value="false" type="bool"/>
+    <param name="visualization/show_debug_paths"
+           value="false" type="bool"/>
 
     <!-- World-frame local occupied cloud supplied by DAIB-Explorer. -->
     <param name="grid_map/resolution"
